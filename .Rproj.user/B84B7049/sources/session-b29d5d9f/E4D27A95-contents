@@ -1,4 +1,5 @@
 # Load necessary libraries
+library(dplyr)
 library(ggplot2)   # for plotting
 library(rstanarm)
 
@@ -100,11 +101,15 @@ binned_ppc <- function(xvar, xlab){
     )
 }
 
-binned_ppc(data$gender, "Gender")
 binned_ppc(data$age, "Age") 
 binned_ppc(data$yearsmarried, "Years Married")
-binned_ppc(data$children, "Children")
-binned_ppc(data$religiousness, "Religiousness")
-binned_ppc(data$education, "Education")
-binned_ppc(data$occupation, "Occupation")
 binned_ppc(data$rating, "Rating")
+
+obs_mean <- mean(data$had_affair)
+rep_means <- colMeans(ppc_results)
+
+hist(rep_means, breaks = 30,
+     main = "Posterior predictive check: Mean affair rate",
+     xlab = "Mean proportion")
+abline(v = obs_mean, col = "red", lwd = 2)
+
