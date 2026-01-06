@@ -1,0 +1,97 @@
+library(ggplot2)
+library(dplyr)
+set.seed(123)
+# Generate simple binary classification data
+n <- 300
+x <- runif(n, -3, 3)
+p <- plogis(-0.5 + 1.2*x)
+# true logistic curve
+idx <- order(x)
+
+plot(x[idx], p[idx], type = "l", lwd = 2,
+     col = "blue",
+     xlab = "x", ylab = "p(x)",
+     main = "Logistic
+Function p = plogis(-0.5 + 1.2x)")
+y <- rbinom(n, size=1, prob=p)
+data <- data.frame(x, y)
+
+  
+# Fit logistic regression
+fit <- glm(y ~ x, data=data, family=binomial)
+# Posterior simulation
+# (approximation using coef covariance)
+coef_draws <- MASS::mvrnorm(1000,
+                            coef(fit), vcov(fit))
+# Approximates the posterior distribution
+# of (beta_0, beta_1)
+# using the normal approximation
+# Generates 1000 posterior draws
+# of the model parameters.
+
+
+# Posterior predictive simulation
+ppc_results <- sapply(1:1000, function(s){
+  p_s <- plogis(coef_draws[s,1] +
+                  coef_draws[s,2]*x)
+  rbinom(n, size=1, prob=p_s)
+})
+
+#For each posterior draw:
+# 1.Compute predicted probabilities for each
+# observation.
+# 2.Draw new replicated binary outcomes
+#yˆrep_i \sim Bernoulli(pˆs_i).
+#You end up with 1000 replicated datasets,
+# each of size 300.
+#This is the heart of posterior
+# predictive checking.
+
+# Binned PPC (like Gelman & Hill style)
+# For visualization
+bins <- cut(x, breaks=10)
+df_ppc <- data.frame(
+  x = x,
+  y = y,
+  bin = bins
+)
+
+ppc_summary <- df_ppc %>%
+  group_by(bin) %>%
+  summarise(
+    observed = mean(y),
+    lower = quantile(colMeans(
+      ppc_results[df_ppc$bin == bin, ]), 0.05),
+    upper = quantile(colMeans(
+      ppc_results[df_ppc$bin == bin, ]), 0.95),
+    midx = mean(x)
+  )
+
+#For each bin:
+#observed = mean of y in that bin
+#(i.e., empirical probability of success)
+#lower/upper = 5% and 95% percentiles
+# of predictive replicated proportions
+#(from your PPC simulation)
+#midx = average x-value in the bin (for plotting)
+#This produces a band of predicted probabilities
+# and the actual observed probability for each bin.
+# Plot
+#Draws a blue ribbon representing the
+# posterior predictive distribution.
+#Adds black dots showing the observed proportions.
+#If the model fits well, the black dots
+# should fall inside the ribbon.
+
+png("binomial_ppc_binned.png", width=600,
+    height=400)
+ggplot(ppc_summary, aes(x=midx)) +
+  geom_ribbon(aes(ymin=lower, ymax=upper),
+              fill="lightblue", alpha=0.5) +
+  geom_point(aes(y=observed), size=3) +
+  labs(title="Posterior Predictive
+Check -- Binomial Data (Binned)",
+       x="x (binned)", y="Observed
+vs Predictive proportion") +
+  theme_minimal()
+dev.off()

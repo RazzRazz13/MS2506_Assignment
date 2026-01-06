@@ -1,16 +1,10 @@
 # Load necessary libraries
+library(ggplot2)   # for plotting
 library(rstanarm)
-library(ggplot2)
 
+set.seed(123)
 data <- read.csv("Affairs.csv")
-
-str(data)
-head(data)
-
 data$had_affair <- ifelse(data$affairs > 0, 1, 0)
-data$had_affair <- as.factor(data$had_affair)
-
-table(data$had_affair)
 
 data <- data[, c(
   "gender",
@@ -24,27 +18,93 @@ data <- data[, c(
   "had_affair"
 )]
 
-data$gender <- as.numeric(factor(data$gender))
 data$children <- ifelse(data$children == "yes", 1, 0)
+data$gender <- as.numeric(factor(data$gender))
+data$religiousness <- scale(data$religiousness)
+data$education <- scale(data$education)
+data$occupation <- as.numeric(data$occupation)
+data$rating <- as.numeric(data$rating)
+data$age <- as.numeric(data$age)
+data$yearsmarried <- as.numeric(data$yearsmarried)
 
-data$gender <- factor(data$gender)
-data$age <- scale(data$age)
-data$yearsmarried <- scale(data$yearsmarried)
-data$children <- factor(data$children)
-data$religiousness <- factor(data$religiousness)
-data$education <- factor(data$education)
-data$occupation <- factor(data$occupation)
-data$rating <- factor(data$rating)
-
+# Bayesian logistic regression
 fit <- stan_glm(
-  had_affair ~ gender + age + yearsmarried + religiousness + children +
-    religiousness +education + occupation + rating+ had_affair,
+  had_affair ~ gender + age + yearsmarried + children +
+    religiousness + education + occupation + rating,
   data = data,
   family = binomial(link = "logit"),
-  prior = normal(0, 2.5),       # prior for coefficients
-  prior_intercept = normal(0, 5), # prior for intercept
+  prior = normal(0, 2.5),
+  prior_intercept = normal(0, 5),
+  chains = 4,
+  iter = 2000
 )
 
-# Posterior predictive check
-pp_check(fit, plotfun = "hist", bins = 2) +
-  ggtitle("Posterior Predictive Check: Had Affair (0 = No, 1 = Yes)")
+# Posterior predictive draws
+# Transpose so rows = observations, columns = posterior draws
+ppc_results <- t(posterior_predict(fit))
+
+
+## Helper function
+ppc_by_bin <- function(x, y, ppc_results, breaks = 10) {
+  bins <- cut(x, breaks = breaks)
+  df <- data.frame(x = x, y = y, bin = bins)
+  df_list <- df %>% group_split(bin)
+  
+  lapply(df_list, function(d){
+    idx <- as.numeric(rownames(d))
+    data.frame(
+      observed = mean(d$y),
+      lower = quantile(apply(ppc_results[idx, ], 2, mean), 0.05),
+      upper = quantile(apply(ppc_results[idx, ], 2, mean), 0.95),
+      midx = mean(d$x)
+    )
+  }) %>% bind_rows()
+}
+
+binned_ppc <- function(xvar, xlab){
+  
+#  Bin the predictor
+  ppc_summary <- ppc_by_bin(
+    x = xvar,
+    y = data$had_affair,
+    ppc_results = ppc_results,
+    breaks = 10
+  )
+  
+#  Plot
+  ggplot(ppc_summary, aes(x = midx)) +
+    geom_ribbon(
+      aes(ymin = lower, ymax = upper, fill = "Posterior predictive interval"),
+      alpha = 0.5
+    ) +
+    geom_point(
+      aes(y = observed, color = "Observed proportion"),
+      size = 3
+    ) +
+    scale_fill_manual(
+      name = "",
+      values = c("Posterior predictive interval" = "lightblue")
+    ) +
+    scale_color_manual(
+      name = "",
+      values = c("Observed proportion" = "black")
+    ) +
+    labs(
+      title = paste("Posterior Predictive Check --", xlab),
+      x = paste(xlab, "(binned)"),
+      y = "Observed vs Predicted proportion"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom"
+    )
+}
+
+binned_ppc(data$gender, "Gender")
+binned_ppc(data$age, "Age") 
+binned_ppc(data$yearsmarried, "Years Married")
+binned_ppc(data$children, "Children")
+binned_ppc(data$religiousness, "Religiousness")
+binned_ppc(data$education, "Education")
+binned_ppc(data$occupation, "Occupation")
+binned_ppc(data$rating, "Rating")

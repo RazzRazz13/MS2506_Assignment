@@ -1,0 +1,7 @@
+# Which factors influence the probability of having at least one extramarital affair?
+
+
+data <- read.csv("Affairs.csv",
+                 header = FALSE, sep = "\t")
+
+head(data)
