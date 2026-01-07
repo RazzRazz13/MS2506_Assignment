@@ -113,3 +113,28 @@ hist(rep_means, breaks = 30,
      xlab = "Mean proportion")
 abline(v = obs_mean, col = "red", lwd = 2)
 
+# Posterior predictive probabilities
+pp_prob <- posterior_epred(fit)  
+# rows = posterior draws, cols = observations
+
+# Convert probabilities to class predictions (threshold = 0.5)
+pp_class <- pp_prob > 0.5
+
+# Observed outcomes
+y_obs <- data$had_affair
+
+# Accuracy per posterior draw
+pp_accuracy <- apply(pp_class, 1, function(pred){
+  mean(pred == y_obs)
+})
+
+# Summary
+summary(pp_accuracy)
+quantile(pp_accuracy, c(0.05, 0.5, 0.95))
+
+# Plot accuracy distribution
+hist(pp_accuracy, breaks = 30,
+     main = "Posterior Predictive Accuracy",
+     xlab = "Accuracy")
+abline(v = mean(pp_accuracy), col = "red", lwd = 2)
+
